@@ -1,2 +1,2 @@
 # maptosphere
-Herramienta en HTML para proyectar mapas e imágenes sobre una esfera.
+Aplicación web para encuadrar una imagen y visualizar su proyección sobre una esfera 3D.
