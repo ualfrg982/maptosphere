@@ -1,0 +1,819 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#050505">
+  <meta name="description" content="Editor de proyecciones de imágenes sobre una esfera 3D.">
+  <title>maptosphere · Proyección de imágenes</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #050505;
+      --panel: #0b0b0b;
+      --panel-2: #121212;
+      --line: rgba(255, 255, 255, .12);
+      --muted: #929292;
+      --text: #f2f2f2;
+      --accent: #dedede;
+      --accent-2: #bdbdbd;
+      --good: #66d6b0;
+      --radius: 16px;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text); font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    body { min-height: 100vh; }
+    button, input, select { font: inherit; }
+    button { cursor: pointer; }
+    .app { min-height: 100vh; display: flex; flex-direction: column; }
+    .topbar { min-height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 8px 16px; border-bottom: 1px solid var(--line); background: rgba(7, 7, 7, .97); }
+    .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .brand-mark { width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; background: linear-gradient(145deg, #f0f0f0, #929292); color: #080808; box-shadow: 0 5px 18px rgba(255,255,255,.08); }
+    .brand-mark svg { width: 23px; height: 23px; }
+    .brand-name { font-weight: 750; letter-spacing: -.035em; font-size: 17px; }
+    .btn { border: 1px solid var(--line); color: var(--text); background: #171717; padding: 8px 11px; border-radius: 8px; font-size: 12px; font-weight: 650; transition: .16s ease; }
+    .btn:hover { border-color: rgba(255,255,255,.35); background: #242424; transform: translateY(-1px); }
+    .btn.primary { color: #080808; background: #eeeeee; border-color: #eeeeee; }
+    .btn.primary:hover { background: #ffffff; }
+    .btn:disabled { opacity: .42; cursor: not-allowed; transform: none; }
+    .workspace { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(320px, .92fr) minmax(440px, 1.08fr); gap: 10px; padding: 10px; }
+    .panel { min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 11px; overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,.25); }
+    .editor-panel, .viewer-panel { display: flex; flex-direction: column; min-height: 540px; }
+    .panel-head { min-height: 52px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+    .head-title { font-size: 14px; font-weight: 700; letter-spacing: -.01em; }
+    .head-caption { color: var(--muted); font-size: 11px; margin-top: 4px; }
+    .panel-head-right { display: flex; align-items: center; gap: 8px; }
+    .tiny-btn { border: 1px solid var(--line); background: #171717; color: #dedede; border-radius: 7px; padding: 6px 8px; font-size: 10px; white-space: nowrap; }
+    .tiny-btn:hover { border-color: rgba(255,255,255,.4); color: white; background:#242424; }
+    .tiny-btn:disabled { opacity:.4; cursor:not-allowed; }
+    .tiny-btn:disabled:hover { border-color:var(--line); color:#dedede; background:#171717; }
+    .editor-content { padding: 11px; display: flex; flex-direction: column; gap: 10px; flex: 1; }
+    .upload-box { border: 1px dashed rgba(255,255,255,.22); background: linear-gradient(145deg, rgba(255,255,255,.045), rgba(255,255,255,.012)); border-radius: 9px; padding: 10px; display: flex; align-items: center; gap: 10px; }
+    .upload-icon { width: 32px; height: 32px; flex: 0 0 auto; border-radius: 8px; display: grid; place-items: center; background: rgba(255,255,255,.09); color: #eeeeee; }
+    .upload-copy { min-width: 0; flex: 1; }
+    .upload-copy strong { display: block; font-size: 12px; }
+    .upload-copy span { color: var(--muted); font-size: 11px; display: block; margin-top: 4px; line-height: 1.45; }
+    .editor-stage-wrap { display: flex; flex-direction: column; gap: 9px; }
+    .stage-label { display: flex; justify-content: space-between; align-items: center; color: #bdbdbd; font-size: 11px; }
+    .ratio-tag { border: 1px solid var(--line); color: #dedede; border-radius: 6px; padding: 3px 6px; font-variant-numeric: tabular-nums; }
+    .editor-stage { position: relative; width: 100%; aspect-ratio: 2 / 1; background: #080808; border: 1px solid rgba(255,255,255,.28); border-radius: 0; overflow: hidden; touch-action: none; cursor: grab; box-shadow: inset 0 0 0 1px rgba(0,0,0,.2), 0 5px 16px rgba(0,0,0,.25); }
+    .editor-stage.dragging { cursor: grabbing; }
+    #editorCanvas { display: block; width: 100%; height: 100%; }
+    .editor-guides { pointer-events: none; position: absolute; inset: 0; opacity: .62; background-image: linear-gradient(to right, transparent 49.9%, rgba(230,236,255,.14) 50%, transparent 50.1%), linear-gradient(to bottom, transparent 49.9%, rgba(230,236,255,.14) 50%, transparent 50.1%); }
+    .editor-guides::before, .editor-guides::after { content: ""; position: absolute; background: rgba(230,236,255,.11); }
+    .editor-guides::before { left: 25%; top: 0; height: 100%; width: 1px; }
+    .editor-guides::after { left: 75%; top: 0; height: 100%; width: 1px; }
+    .empty-hint { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px; pointer-events: none; }
+    .empty-hint .empty-symbol { width: 40px; height: 40px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.18); border-radius: 11px; background: rgba(255,255,255,.06); color: #dddddd; margin-bottom: 8px; }
+    .empty-hint strong { font-size: 13px; }
+    .empty-hint span { font-size: 11px; color: #929292; margin-top: 5px; }
+    .stage-instruction { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+    .stage-instruction svg { flex: 0 0 auto; color: #d0d0d0; }
+    .editor-footer { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; margin-top: auto; padding-top: 2px; min-height: 30px; }
+    .editor-actions { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:6px; }
+    .editor-status { color: var(--muted); font-size: 10px; line-height: 1.35; overflow-wrap: anywhere; }
+    .upload-actions { display:flex; align-items:center; gap:6px; flex:0 0 auto; }
+    .btn.danger { border-color:rgba(255,105,105,.28); color:#ffaaaa; background:#211414; }
+    .btn.danger:hover { border-color:rgba(255,105,105,.55); background:#321919; }
+    .export-texture-btn { padding:7px 10px; font-size:11px; }
+    .zoom-readout { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .zoom-controls { display: flex; gap: 6px; }
+    .zoom-controls button { width: 27px; height: 27px; border: 1px solid var(--line); background: #171717; color: #eeeeee; border-radius: 7px; font-size: 15px; line-height: 1; }
+    .zoom-controls button:hover { background: #292929; }
+    .viewer-stage { position: relative; flex: 1; min-height: 300px; overflow: hidden; background: #101010; }
+    #viewerStage:fullscreen { width:100vw; height:100vh; min-height:100vh; border-radius:0; }
+    .viewer-tools { position:absolute; top:9px; right:10px; z-index:3; display:flex; gap:6px; }
+    .viewer-tools .tiny-btn { background:rgba(12,12,12,.82); backdrop-filter: blur(8px); }
+    #threeHost { position: absolute; inset: 0; }
+    #threeHost canvas { display: block; width: 100%; height: 100%; }
+    .view-help { position: absolute; left: 10px; bottom: 9px; color: rgba(230,230,230,.62); font-size: 9px; pointer-events: none; background: rgba(8,8,8,.48); padding: 5px 7px; border-radius: 6px; }
+    .controls { border-top: 1px solid var(--line); background: #090909; padding: 9px 11px 10px; }
+    .controls-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 9px; }
+    .controls-top-actions { display:flex; align-items:center; gap:6px; }
+    .lighting-toggle[aria-pressed="true"] { border-color:rgba(255,255,255,.4); color:#fff; }
+    .lighting-toggle[aria-pressed="false"] { color:#a0a0a0; }
+    .controls-title { font-size: 12px; font-weight: 750; }
+    .controls-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px 11px; }
+    .lighting-grid { margin-top:9px; padding-top:9px; border-top:1px solid var(--line); }
+    [hidden] { display:none !important; }
+    .control { min-width: 0; }
+    .control label { display: flex; justify-content: space-between; align-items: center; gap: 6px; color: #bdbdbd; font-size: 9px; margin-bottom: 5px; }
+    .control output { color: #f0f0f0; font-size: 10px; font-variant-numeric: tabular-nums; }
+    select { width: 100%; min-width: 0; appearance: none; border: 1px solid var(--line); border-radius: 7px; background: #171717; color: var(--text); font-size: 10px; padding: 7px 25px 7px 8px; outline: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23bdbdbd' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 8px center; }
+    select:focus { border-color: #aaaaaa; }
+    input[type="range"] { display: block; width: 100%; accent-color: #d0d0d0; cursor: pointer; }
+    .hex-input { display:block; width:100%; height:29px; border:1px solid var(--line); border-radius:7px; background:#171717; color:var(--text); padding:5px 8px; font-size:10px; font-family:ui-monospace, SFMono-Regular, Menlo, monospace; outline:none; }
+    .hex-input:focus { border-color:#aaaaaa; }
+    .hex-input.invalid { border-color:#d66b6b; }
+    .projection-note { color: #858585; font-size: 9px; line-height: 1.4; margin-top: 7px; min-height: 13px; }
+    .status-left { display:flex; align-items:center; gap:8px; min-width:0; }
+    .status-indicator { width:6px; height:6px; flex:0 0 auto; border-radius:50%; background:#65748b; }
+    .status-indicator.active { background:var(--good); }
+    #fileInput { display: none; }
+    .toast { position: fixed; bottom: 52px; left: 50%; transform: translate(-50%, 12px); opacity: 0; pointer-events: none; border: 1px solid rgba(255,255,255,.18); background: #202020; color: white; padding: 10px 14px; border-radius: 10px; font-size: 12px; box-shadow: 0 12px 35px rgba(0,0,0,.35); transition: .2s ease; z-index: 10; }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+    .drop-active { outline: 2px dashed #eeeeee; outline-offset: -7px; background: rgba(255,255,255,.07); }
+    @media (max-width: 1050px) {
+      .workspace { grid-template-columns: minmax(290px, .9fr) minmax(360px, 1.1fr); gap: 9px; padding: 9px; }
+      .controls-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap:8px; }
+      .editor-content { padding: 10px; }
+    }
+    @media (max-width: 800px) {
+      .topbar { padding: 12px 15px; }
+      .workspace { display: flex; flex-direction: column; }
+      .editor-panel, .viewer-panel { min-height: auto; }
+      .viewer-stage { min-height: 340px; }
+      .editor-content { padding: 11px; }
+    }
+    @media (max-width: 480px) {
+      .topbar { min-height: 62px; }
+      .controls-grid { grid-template-columns: 1fr 1fr; gap: 10px 9px; }
+      .viewer-stage { min-height: 320px; }
+      .upload-box { align-items: flex-start; flex-wrap: wrap; }
+      .upload-actions { margin-left: 51px; }
+    }
+  </style>
+  <script type="importmap">
+    { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.module.js" } }
+  </script>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8.6"/><path d="M3.8 9.4h16.4M3.8 14.6h16.4M12 3.4c2.1 2.3 3.2 5.2 3.2 8.6s-1.1 6.3-3.2 8.6c-2.1-2.3-3.2-5.2-3.2-8.6S9.9 5.7 12 3.4Z"/></svg>
+      </div>
+      <div><div class="brand-name">maptosphere</div></div>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <section class="panel editor-panel" aria-label="Editor de imagen">
+      <div class="panel-head">
+        <div><div class="head-title">Encuadre de imagen</div><div class="head-caption">Ajusta qué parte de la imagen se proyectará</div></div>
+        <div class="panel-head-right"><button class="tiny-btn" id="resetAllBtn" title="Restablecer la vista y el encuadre">Restablecer</button></div>
+      </div>
+      <div class="editor-content">
+        <div class="upload-box">
+          <div class="upload-icon" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4m-4 4 4-4 4 4"/><path d="M4 16.5v2A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5v-2"/></svg>
+          </div>
+          <div class="upload-copy"><strong id="fileName">Sube tu imagen</strong><span id="fileMeta">PNG, JPG, WEBP · Se procesa localmente en tu navegador</span></div>
+          <div class="upload-actions">
+            <button class="btn" id="uploadBtn">Elegir archivo</button>
+            <button class="btn danger" id="deleteImageBtn" type="button" hidden>Eliminar</button>
+          </div>
+          <input id="fileInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp">
+        </div>
+
+        <div class="editor-stage-wrap">
+          <div class="stage-label"><span>ÁREA DE PROYECCIÓN</span><span class="ratio-tag">2:1 · 360° × 180°</span></div>
+          <div class="editor-stage" id="editorStage" aria-label="Arrastra la imagen para encuadrarla; usa la rueda para cambiar el zoom">
+            <canvas id="editorCanvas" width="1200" height="600"></canvas>
+            <div class="editor-guides"></div>
+            <div class="empty-hint" id="emptyHint">
+              <div class="empty-symbol"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg></div>
+              <strong>Tu imagen aparecerá aquí</strong><span>Arrastra un archivo o pulsa «Elegir archivo»</span>
+            </div>
+          </div>
+          <div class="stage-instruction">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="9"/></svg>
+            Arrastra para desplazar · Rueda del ratón para acercar o alejar · El marco permanece fijo
+          </div>
+        </div>
+        <div class="editor-footer">
+          <div class="status-left editor-status"><span class="status-indicator" id="statusIndicator"></span><span id="statusText">Carga una imagen para empezar</span></div>
+          <div class="editor-actions">
+            <button class="tiny-btn" id="centerBtn" title="Centrar y recuperar el encuadre de portada">Centrar</button>
+            <button class="tiny-btn" id="stretchBtn" title="Estirar la imagen para llenar el marco en ambos ejes">Estirar</button>
+            <button class="tiny-btn" id="fitBtn" title="Ajustar la imagen completa sin recortar">Contener</button>
+            <span class="zoom-readout" id="zoomReadout">Zoom: —</span>
+            <div class="zoom-controls"><button id="zoomOutBtn" aria-label="Alejar 1 %">−</button><button id="zoomInBtn" aria-label="Acercar 1 %">+</button></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel viewer-panel" aria-label="Previsualización 3D">
+      <div class="panel-head">
+        <div><div class="head-title">Vista 3D</div><div class="head-caption">La esfera se actualiza al modificar el encuadre</div></div>
+        <div class="panel-head-right"><button class="tiny-btn export-texture-btn" id="exportBtn" disabled>Exportar textura ↓</button></div>
+      </div>
+      <div class="viewer-stage" id="viewerStage">
+        <div id="threeHost"></div>
+        <div class="viewer-tools">
+          <button class="tiny-btn" id="screenshotBtn" title="Guardar una captura del visor 3D">↓ Captura</button>
+          <button class="tiny-btn" id="fullscreenBtn" title="Ver el visor a pantalla completa">⛶ Pantalla completa</button>
+        </div>
+        <div class="view-help">Arrastrar: rotar · Rueda: zoom</div>
+      </div>
+      <div class="controls">
+        <div class="controls-top">
+          <div class="controls-title">Parámetros de la esfera</div>
+          <div class="controls-top-actions">
+            <button class="tiny-btn lighting-toggle" id="lightingToggleBtn" aria-pressed="true">Iluminación: Sí</button>
+            <button class="tiny-btn" id="resetControlsBtn">Por defecto</button>
+          </div>
+        </div>
+        <div class="controls-grid">
+          <div class="control">
+            <label for="projectionSelect">Tipo de proyección</label>
+            <select id="projectionSelect">
+              <option value="equirectangular">Equirectangular</option>
+              <option value="mercator">Cilíndrica (Mercator)</option>
+              <option value="azimuthal">Azimutal</option>
+            </select>
+          </div>
+          <div class="control">
+            <label for="tessellationSelect">Teselado</label>
+            <select id="tessellationSelect">
+              <option value="32x24">Bajo · 32 × 24</option>
+              <option value="64x48">Medio · 64 × 48</option>
+              <option value="128x96" selected>Alto · 128 × 96</option>
+              <option value="256x192">Muy alto · 256 × 192</option>
+            </select>
+          </div>
+          <div class="control">
+            <label for="fovRange">FOV cámara <output id="fovValue">38°</output></label>
+            <input id="fovRange" type="range" min="20" max="85" step="1" value="38">
+          </div>
+          <div class="control">
+            <label for="backgroundColor">Fondo del visor</label>
+            <input id="backgroundColor" class="hex-input" type="text" value="#101010" placeholder="#101010" maxlength="7" spellcheck="false" autocomplete="off">
+          </div>
+        </div>
+        <div class="controls-grid lighting-grid" id="lightingControls">
+          <div class="control lighting-control">
+            <label for="ambientRange">Luz ambiental <output id="ambientValue">1.1</output></label>
+            <input id="ambientRange" type="range" min="0" max="2.5" step="0.05" value="1.1">
+          </div>
+          <div class="control lighting-control">
+            <label for="directRange">Luz direccional <output id="directValue">2.0</output></label>
+            <input id="directRange" type="range" min="0" max="4" step="0.05" value="2">
+          </div>
+          <div class="control lighting-control">
+            <label for="lightAzimuthRange">Foco · Azimut <output id="lightAzimuthValue">45°</output></label>
+            <input id="lightAzimuthRange" type="range" min="0" max="360" step="1" value="45">
+          </div>
+          <div class="control lighting-control">
+            <label for="lightElevationRange">Foco · Elevación <output id="lightElevationValue">50°</output></label>
+            <input id="lightElevationRange" type="range" min="-90" max="90" step="1" value="50">
+          </div>
+          <div class="control lighting-control">
+            <label for="roughnessRange">Rugosidad <output id="roughnessValue">0.65</output></label>
+            <input id="roughnessRange" type="range" min="0" max="1" step="0.01" value="0.65">
+          </div>
+          <div class="control lighting-control">
+            <label for="metalnessRange">Metalizado <output id="metalnessValue">0.00</output></label>
+            <input id="metalnessRange" type="range" min="0" max="1" step="0.01" value="0">
+          </div>
+        </div>
+        <div class="projection-note" id="projectionNote">Equirectangular: distribuye la imagen por toda la esfera, de polo a polo. Es el modo recomendado para panorámicas 360°.</div>
+      </div>
+    </section>
+  </main>
+
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script type="module">
+  import * as THREE from 'three';
+  import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/controls/OrbitControls.js';
+
+  const $ = (id) => document.getElementById(id);
+  const editorCanvas = $('editorCanvas');
+  const editorCtx = editorCanvas.getContext('2d', { willReadFrequently: true });
+  const stage = $('editorStage');
+  const fileInput = $('fileInput');
+  const emptyHint = $('emptyHint');
+  const textureCanvas = document.createElement('canvas');
+  textureCanvas.width = 1024;
+  textureCanvas.height = 512;
+  const textureCtx = textureCanvas.getContext('2d', { willReadFrequently: true });
+
+  const state = {
+    image: null,
+    imageName: '',
+    scale: 1,
+    offsetX: 0,
+    offsetY: 0,
+    baseScaleX: 1,
+    baseScaleY: 1,
+    dragging: false,
+    lastPointer: null,
+    zoomAtFit: 1,
+    projection: 'equirectangular',
+    lightingEnabled: true,
+    texture: null,
+    textureReady: false,
+    updateQueued: false,
+    toastTimer: null
+  };
+
+  // ---- Three.js scene ------------------------------------------------------
+  const host = $('threeHost');
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color($('backgroundColor').value);
+  const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
+  camera.position.set(0, 0, 3.35);
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, preserveDrawingBuffer: true, powerPreference: 'high-performance' });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
+  host.appendChild(renderer.domElement);
+
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.055;
+  controls.minDistance = 1.65;
+  controls.maxDistance = 8;
+  controls.rotateSpeed = 0.72;
+  controls.zoomSpeed = 0.85;
+
+  const ambientLight = new THREE.HemisphereLight(0xdce6ff, 0x354052, 1.1);
+  scene.add(ambientLight);
+  const keyLight = new THREE.DirectionalLight(0xffffff, 2.0);
+  keyLight.position.set(2.9, 3.45, 2.9);
+  scene.add(keyLight);
+  const fillLight = new THREE.DirectionalLight(0x8da7ff, 0.35);
+  fillLight.position.set(4, -2, -3);
+  scene.add(fillLight);
+
+  let sphereGeometry = new THREE.SphereGeometry(1, 128, 96);
+  const sphereMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.65, metalness: 0.0 });
+  const unlitMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false });
+  const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+  scene.add(sphere);
+  let rimGeometry = new THREE.SphereGeometry(1.006, 80, 60);
+  const rimMaterial = new THREE.MeshBasicMaterial({ color: 0x7485ba, wireframe: true, transparent: true, opacity: 0.055 });
+  const rim = new THREE.Mesh(rimGeometry, rimMaterial);
+  scene.add(rim);
+
+  function resizeRenderer() {
+    const width = Math.max(1, host.clientWidth);
+    const height = Math.max(1, host.clientHeight);
+    renderer.setSize(width, height, false);
+    camera.aspect = width / height;
+    camera.updateProjectionMatrix();
+  }
+  const resizeObserver = new ResizeObserver(resizeRenderer);
+  resizeObserver.observe(host);
+  resizeRenderer();
+
+  function animate() {
+    requestAnimationFrame(animate);
+    controls.update();
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  // ---- 2D editor -----------------------------------------------------------
+  function drawEditor() {
+    const w = editorCanvas.width, h = editorCanvas.height;
+    editorCtx.clearRect(0, 0, w, h);
+    editorCtx.fillStyle = '#111111';
+    editorCtx.fillRect(0, 0, w, h);
+    // Subtle checkerboard makes uncovered parts of the frame visible.
+    const cell = 32;
+    for (let y = 0; y < h; y += cell) {
+      for (let x = 0; x < w; x += cell) {
+        if (((x / cell) + (y / cell)) % 2 === 0) {
+          editorCtx.fillStyle = 'rgba(255,255,255,0.025)';
+          editorCtx.fillRect(x, y, cell, cell);
+        }
+      }
+    }
+    if (state.image) {
+      editorCtx.save();
+      editorCtx.imageSmoothingEnabled = true;
+      editorCtx.imageSmoothingQuality = 'high';
+      editorCtx.drawImage(
+        state.image,
+        state.offsetX,
+        state.offsetY,
+        state.image.naturalWidth * state.baseScaleX * state.scale,
+        state.image.naturalHeight * state.baseScaleY * state.scale
+      );
+      editorCtx.restore();
+    }
+    $('zoomReadout').textContent = state.image ? `Zoom: ${Math.round(state.scale * 100)}%` : 'Zoom: —';
+    emptyHint.style.display = state.image ? 'none' : 'flex';
+  }
+
+  function fitImage(mode = 'cover') {
+    if (!state.image) return;
+    const iw = state.image.naturalWidth;
+    const ih = state.image.naturalHeight;
+    const sx = editorCanvas.width / iw;
+    const sy = editorCanvas.height / ih;
+    if (mode === 'stretch') {
+      state.baseScaleX = sx;
+      state.baseScaleY = sy;
+    } else {
+      const uniformScale = mode === 'contain' ? Math.min(sx, sy) : Math.max(sx, sy);
+      state.baseScaleX = uniformScale;
+      state.baseScaleY = uniformScale;
+    }
+    state.scale = 1;
+    state.offsetX = (editorCanvas.width - iw * state.baseScaleX) / 2;
+    state.offsetY = (editorCanvas.height - ih * state.baseScaleY) / 2;
+    drawEditor();
+    scheduleTextureUpdate();
+  }
+
+  function applyZoom(factor, clientX = null, clientY = null) {
+    if (!state.image) return;
+    const rect = stage.getBoundingClientRect();
+    const px = clientX == null ? rect.width / 2 : clientX - rect.left;
+    const py = clientY == null ? rect.height / 2 : clientY - rect.top;
+    const anchorX = px * editorCanvas.width / rect.width;
+    const anchorY = py * editorCanvas.height / rect.height;
+    const nextScale = Math.min(12, Math.max(0.12, state.scale * factor));
+    const actualFactor = nextScale / state.scale;
+    state.offsetX = anchorX - (anchorX - state.offsetX) * actualFactor;
+    state.offsetY = anchorY - (anchorY - state.offsetY) * actualFactor;
+    state.scale = nextScale;
+    drawEditor();
+    scheduleTextureUpdate();
+  }
+
+  function loadFile(file) {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      showToast('El archivo seleccionado no parece ser una imagen.');
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      if (state.objectUrl) URL.revokeObjectURL(state.objectUrl);
+      state.objectUrl = url;
+      state.image = img;
+      state.imageName = file.name;
+      $('fileName').textContent = file.name;
+      $('fileMeta').textContent = `${img.naturalWidth} × ${img.naturalHeight} px · ${(file.size / 1024 / 1024).toFixed(2)} MB`;
+      $('statusText').textContent = `Imagen cargada: ${file.name}`;
+      $('statusIndicator').classList.add('active');
+      $('exportBtn').disabled = false;
+      $('deleteImageBtn').hidden = false;
+      fitImage('cover');
+      showToast('Imagen cargada correctamente');
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      showToast('No se ha podido abrir esa imagen.');
+    };
+    img.src = url;
+  }
+
+  $('uploadBtn').addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', (event) => {
+    loadFile(event.target.files?.[0]);
+    fileInput.value = '';
+  });
+
+  function deleteImage() {
+    if (state.objectUrl) URL.revokeObjectURL(state.objectUrl);
+    state.objectUrl = null;
+    state.image = null;
+    state.imageName = '';
+    state.scale = 1;
+    state.offsetX = 0;
+    state.offsetY = 0;
+    state.baseScaleX = 1;
+    state.baseScaleY = 1;
+    $('fileName').textContent = 'Sube tu imagen';
+    $('fileMeta').textContent = 'PNG, JPG, WEBP · Se procesa localmente en tu navegador';
+    $('deleteImageBtn').hidden = true;
+    $('exportBtn').disabled = true;
+    $('statusText').textContent = 'Imagen eliminada · Carga otra para empezar';
+    $('statusIndicator').classList.remove('active');
+    drawEditor();
+    textureCtx.clearRect(0, 0, textureCanvas.width, textureCanvas.height);
+    textureCtx.fillStyle = '#101010';
+    textureCtx.fillRect(0, 0, textureCanvas.width, textureCanvas.height);
+    if (state.texture) state.texture.needsUpdate = true;
+    state.textureReady = false;
+    showToast('Imagen eliminada');
+  }
+  $('deleteImageBtn').addEventListener('click', deleteImage);
+
+  stage.addEventListener('pointerdown', (event) => {
+    if (!state.image || event.button !== 0) return;
+    state.dragging = true;
+    state.lastPointer = { x: event.clientX, y: event.clientY };
+    stage.classList.add('dragging');
+    stage.setPointerCapture(event.pointerId);
+  });
+  stage.addEventListener('pointermove', (event) => {
+    if (!state.dragging || !state.lastPointer) return;
+    const rect = stage.getBoundingClientRect();
+    const dx = (event.clientX - state.lastPointer.x) * editorCanvas.width / rect.width;
+    const dy = (event.clientY - state.lastPointer.y) * editorCanvas.height / rect.height;
+    state.offsetX += dx;
+    state.offsetY += dy;
+    state.lastPointer = { x: event.clientX, y: event.clientY };
+    drawEditor();
+    scheduleTextureUpdate();
+  });
+  function stopDrag() { state.dragging = false; state.lastPointer = null; stage.classList.remove('dragging'); }
+  stage.addEventListener('pointerup', stopDrag);
+  stage.addEventListener('pointercancel', stopDrag);
+  stage.addEventListener('wheel', (event) => {
+    if (!state.image) return;
+    event.preventDefault();
+    applyZoom(Math.exp(-event.deltaY * 0.0012), event.clientX, event.clientY);
+  }, { passive: false });
+  stage.addEventListener('dragover', (event) => { event.preventDefault(); stage.classList.add('drop-active'); });
+  stage.addEventListener('dragleave', () => stage.classList.remove('drop-active'));
+  stage.addEventListener('drop', (event) => {
+    event.preventDefault();
+    stage.classList.remove('drop-active');
+    loadFile(event.dataTransfer?.files?.[0]);
+  });
+  document.addEventListener('dragover', (event) => event.preventDefault());
+  document.addEventListener('drop', (event) => { if (!stage.contains(event.target)) event.preventDefault(); });
+
+  $('centerBtn').addEventListener('click', () => fitImage('cover'));
+  $('fitBtn').addEventListener('click', () => fitImage('contain'));
+  $('stretchBtn').addEventListener('click', () => fitImage('stretch'));
+  $('zoomInBtn').addEventListener('click', () => applyZoom(1.01));
+  $('zoomOutBtn').addEventListener('click', () => applyZoom(0.99));
+
+  // ---- Projection / texture generation -----------------------------------
+  const projectionDescriptions = {
+    equirectangular: 'Equirectangular: distribuye la imagen por toda la esfera, de polo a polo. Es el modo recomendado para panorámicas 360°.',
+    mercator: 'Cilíndrica (Mercator): conserva los ángulos y estira las zonas cercanas a los polos, como en muchos mapas del mundo.',
+    azimuthal: 'Azimutal: proyecta la esfera completa sobre un disco centrado en el frente; el punto opuesto queda en el borde.'
+  };
+
+  function scheduleTextureUpdate() {
+    if (!state.image || state.updateQueued) return;
+    state.updateQueued = true;
+    requestAnimationFrame(() => {
+      state.updateQueued = false;
+      updateTexture();
+    });
+  }
+
+  function updateTexture() {
+    if (!state.image) return;
+    const W = textureCanvas.width, H = textureCanvas.height;
+    if (state.projection === 'equirectangular') {
+      textureCtx.clearRect(0, 0, W, H);
+      textureCtx.drawImage(editorCanvas, 0, 0, W, H);
+    } else {
+      const source = editorCtx.getImageData(0, 0, editorCanvas.width, editorCanvas.height);
+      const src = source.data;
+      const sw = source.width, sh = source.height;
+      const out = textureCtx.createImageData(W, H);
+      const dst = out.data;
+      const clamp01 = (v) => Math.max(0, Math.min(1, v));
+      const sample = (u, v, targetIndex) => {
+        if (u < 0 || u > 1 || v < 0 || v > 1) {
+          dst[targetIndex] = 16; dst[targetIndex + 1] = 16; dst[targetIndex + 2] = 16; dst[targetIndex + 3] = 255;
+          return;
+        }
+        const sx = Math.min(sw - 1, Math.max(0, Math.round(u * (sw - 1))));
+        const sy = Math.min(sh - 1, Math.max(0, Math.round(v * (sh - 1))));
+        const si = (sy * sw + sx) * 4;
+        dst[targetIndex] = src[si];
+        dst[targetIndex + 1] = src[si + 1];
+        dst[targetIndex + 2] = src[si + 2];
+        dst[targetIndex + 3] = 255;
+      };
+      for (let y = 0; y < H; y++) {
+        const v = y / (H - 1);
+        const lat = (0.5 - v) * Math.PI;
+        const cosLat = Math.cos(lat);
+        const sinLat = Math.sin(lat);
+        for (let x = 0; x < W; x++) {
+          const u = x / (W - 1);
+          const lon = (u - 0.5) * Math.PI * 2;
+          let su = u, sv = v;
+          if (state.projection === 'mercator') {
+            const maxLat = 85.05112878 * Math.PI / 180;
+            const clampedLat = Math.max(-maxLat, Math.min(maxLat, lat));
+            const mercY = Math.log(Math.tan(Math.PI / 4 + clampedLat / 2));
+            sv = clamp01(0.5 - mercY / (2 * Math.PI));
+          } else if (state.projection === 'azimuthal') {
+            const cosAngle = Math.max(-1, Math.min(1, cosLat * Math.cos(lon)));
+            const angle = Math.acos(cosAngle);
+            const sinAngle = Math.sin(angle);
+            const rho = angle / Math.PI;
+            let dx = 0, dy = 0;
+            if (Math.abs(sinAngle) > 1e-6) {
+              dx = (cosLat * Math.sin(lon)) / sinAngle;
+              dy = sinLat / sinAngle;
+            }
+            su = 0.5 + 0.5 * rho * dx;
+            sv = 0.5 - 0.5 * rho * dy;
+          }
+          sample(su, sv, (y * W + x) * 4);
+        }
+      }
+      textureCtx.putImageData(out, 0, 0);
+    }
+
+    if (!state.texture) {
+      state.texture = new THREE.CanvasTexture(textureCanvas);
+      state.texture.colorSpace = THREE.SRGBColorSpace;
+      state.texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+      sphereMaterial.map = state.texture;
+      sphereMaterial.color.set(0xffffff);
+      sphereMaterial.needsUpdate = true;
+      unlitMaterial.map = state.texture;
+      unlitMaterial.color.set(0xffffff);
+      unlitMaterial.needsUpdate = true;
+    } else {
+      state.texture.needsUpdate = true;
+    }
+    state.textureReady = true;
+    $('statusText').textContent = `Textura actualizada · ${$('projectionSelect').selectedOptions[0].text}`;
+  }
+
+  $('projectionSelect').addEventListener('change', (event) => {
+    state.projection = event.target.value;
+    $('projectionNote').textContent = projectionDescriptions[state.projection];
+    scheduleTextureUpdate();
+  });
+
+  function updateKeyLightOrientation() {
+    const azimuth = THREE.MathUtils.degToRad(Number($('lightAzimuthRange').value));
+    const elevation = THREE.MathUtils.degToRad(Number($('lightElevationRange').value));
+    const distance = 5;
+    const horizontal = Math.cos(elevation) * distance;
+    keyLight.position.set(
+      Math.cos(azimuth) * horizontal,
+      Math.sin(elevation) * distance,
+      Math.sin(azimuth) * horizontal
+    );
+  }
+
+  function connectRange(id, outputId, setter, digits = 2) {
+    const input = $(id), output = $(outputId);
+    const update = () => {
+      const value = Number(input.value);
+      output.value = value.toFixed(digits);
+      setter(value);
+    };
+    input.addEventListener('input', update);
+    update();
+  }
+  connectRange('ambientRange', 'ambientValue', (v) => { ambientLight.intensity = v; });
+  connectRange('directRange', 'directValue', (v) => { keyLight.intensity = v; });
+  connectRange('roughnessRange', 'roughnessValue', (v) => { sphereMaterial.roughness = v; });
+  connectRange('metalnessRange', 'metalnessValue', (v) => { sphereMaterial.metalness = v; });
+  connectRange('lightAzimuthRange', 'lightAzimuthValue', (v) => { updateKeyLightOrientation(); $('lightAzimuthValue').textContent = `${v}°`; }, 0);
+  connectRange('lightElevationRange', 'lightElevationValue', (v) => { updateKeyLightOrientation(); $('lightElevationValue').textContent = `${v}°`; }, 0);
+  connectRange('fovRange', 'fovValue', (v) => {
+    $('fovValue').textContent = `${v.toFixed(0)}°`;
+    camera.fov = v;
+    camera.updateProjectionMatrix();
+  }, 0);
+  function applyBackgroundHex(showError = false) {
+    const input = $('backgroundColor');
+    const raw = input.value.trim();
+    const match = raw.match(/^#?([0-9a-fA-F]{6})$/);
+    if (!match) {
+      input.classList.add('invalid');
+      if (showError) showToast('Introduce un hexadecimal válido, por ejemplo #101010.');
+      return false;
+    }
+    const hex = `#${match[1].toLowerCase()}`;
+    input.value = hex;
+    input.classList.remove('invalid');
+    scene.background.set(hex);
+    return true;
+  }
+  $('backgroundColor').addEventListener('input', () => applyBackgroundHex(false));
+  $('backgroundColor').addEventListener('change', () => {
+    if (!applyBackgroundHex(true)) $('backgroundColor').value = `#${scene.background.getHexString()}`;
+  });
+
+  function setTessellation(value) {
+    const [widthSegments, heightSegments] = value.split('x').map(Number);
+    const nextGeometry = new THREE.SphereGeometry(1, widthSegments, heightSegments);
+    sphere.geometry.dispose();
+    sphere.geometry = nextGeometry;
+    sphereGeometry = nextGeometry;
+    const nextRimGeometry = new THREE.SphereGeometry(1.006, widthSegments, heightSegments);
+    rim.geometry.dispose();
+    rim.geometry = nextRimGeometry;
+    rimGeometry = nextRimGeometry;
+  }
+
+  function setLightingEnabled(enabled) {
+    state.lightingEnabled = enabled;
+    sphere.material = enabled ? sphereMaterial : unlitMaterial;
+    // Hide the decorative wireframe too, so unlit mode shows only the original texture.
+    rim.visible = enabled;
+    $('lightingControls').hidden = !enabled;
+    $('lightingToggleBtn').textContent = `Iluminación: ${enabled ? 'Sí' : 'No'}`;
+    $('lightingToggleBtn').setAttribute('aria-pressed', String(enabled));
+  }
+  $('lightingToggleBtn').addEventListener('click', () => setLightingEnabled(!state.lightingEnabled));
+  $('tessellationSelect').addEventListener('change', (event) => {
+    setTessellation(event.target.value);
+    showToast(`Teselado actualizado: ${event.target.selectedOptions[0].text}`);
+  });
+
+  function resetControls() {
+    $('projectionSelect').value = 'equirectangular';
+    state.projection = 'equirectangular';
+    $('projectionNote').textContent = projectionDescriptions.equirectangular;
+    $('ambientRange').value = '1.1'; $('ambientRange').dispatchEvent(new Event('input'));
+    $('directRange').value = '2'; $('directRange').dispatchEvent(new Event('input'));
+    $('roughnessRange').value = '0.65'; $('roughnessRange').dispatchEvent(new Event('input'));
+    $('metalnessRange').value = '0'; $('metalnessRange').dispatchEvent(new Event('input'));
+    $('lightAzimuthRange').value = '45'; $('lightAzimuthRange').dispatchEvent(new Event('input'));
+    $('lightElevationRange').value = '50'; $('lightElevationRange').dispatchEvent(new Event('input'));
+    $('fovRange').value = '38'; $('fovRange').dispatchEvent(new Event('input'));
+    $('tessellationSelect').value = '128x96'; setTessellation('128x96');
+    setLightingEnabled(true);
+    $('backgroundColor').value = '#101010'; scene.background.set('#101010');
+    scheduleTextureUpdate();
+  }
+  $('resetControlsBtn').addEventListener('click', resetControls);
+
+  $('resetAllBtn').addEventListener('click', () => {
+    if (state.image) fitImage('cover');
+    resetControls();
+    camera.position.set(0, 0, 3.35);
+    controls.target.set(0, 0, 0);
+    controls.update();
+    showToast('Vista restablecida');
+  });
+
+  $('fullscreenBtn').addEventListener('click', async () => {
+    try {
+      if (document.fullscreenElement === $('viewerStage')) {
+        await document.exitFullscreen();
+      } else if ($('viewerStage').requestFullscreen) {
+        await $('viewerStage').requestFullscreen();
+      } else {
+        showToast('La pantalla completa no está disponible en este navegador.');
+      }
+    } catch (error) {
+      showToast('No se ha podido activar la pantalla completa.');
+    }
+  });
+  document.addEventListener('fullscreenchange', () => {
+    $('fullscreenBtn').textContent = document.fullscreenElement === $('viewerStage') ? '⛶ Salir pantalla completa' : '⛶ Pantalla completa';
+    requestAnimationFrame(resizeRenderer);
+  });
+
+  $('screenshotBtn').addEventListener('click', () => {
+    try {
+      renderer.render(scene, camera);
+      renderer.domElement.toBlob((blob) => {
+        if (!blob) { showToast('No se ha podido guardar la captura.'); return; }
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'maptosphere_captura.png';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        showToast('Captura de la esfera guardada');
+      }, 'image/png');
+    } catch (error) {
+      showToast('No se ha podido capturar el visor 3D.');
+    }
+  });
+
+  $('exportBtn').addEventListener('click', () => {
+    if (!state.textureReady) return;
+    textureCanvas.toBlob((blob) => {
+      if (!blob) { showToast('No se ha podido exportar la textura.'); return; }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const baseName = (state.imageName || 'textura').replace(/\.[^.]+$/, '').replace(/[^a-z0-9-_]+/gi, '_');
+      a.href = url;
+      a.download = `${baseName}_${state.projection}.png`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      showToast('Textura PNG exportada');
+    }, 'image/png');
+  });
+
+  function showToast(message) {
+    const toast = $('toast');
+    toast.textContent = message;
+    toast.classList.add('show');
+    clearTimeout(state.toastTimer);
+    state.toastTimer = setTimeout(() => toast.classList.remove('show'), 2300);
+  }
+
+  // Initial canvas state and default lighting direction.
+  updateKeyLightOrientation();
+  $('lightAzimuthValue').textContent = `${$('lightAzimuthRange').value}°`;
+  $('lightElevationValue').textContent = `${$('lightElevationRange').value}°`;
+  $('fovValue').textContent = `${$('fovRange').value}°`;
+  drawEditor();
+</script>
+</body>
+</html>
